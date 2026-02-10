@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Carrera Animal Ultimate</title>
+<style>
+body {
+  margin: 0;
+  background: black;
+  color: white;
+  font-family: Arial;
+  overflow: hidden;
+}
+canvas {
+  display: block;
+  margin: auto;
+  background: #222;
+}
+#ui {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+}
+button {
+  padding: 8px;
+  font-size: 14px;
+  cursor: pointer;
+}
+#menu {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  background: rgba(0,0,0,0.9);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+</style>
+</head>
+<body>
+
+<div id="menu">
+  <h1>🐾 Carrera Animal</h1>
+  <p>Récord: <span id="record"></span></p>
+  <button onclick="iniciarJuego()">Jugar</button>
+</div>
+
+<div id="ui">
+  <button onclick="cambiarAnimal()">Cambiar animal</button>
+</div>
+
+<canvas id="game" width="900" height="400"></canvas>
+
+<audio id="jumpSound" src="https://cdn.pixabay.com/audio/2022/03/15/audio_7e2e41b6b2.mp3"></audio>
+<audio id="hitSound" src="https://cdn.pixabay.com/audio/2022/03/10/audio_aa43d7c5a4.mp3"></audio>
+<audio id="music" src="https://cdn.pixabay.com/audio/2022/08/04/audio_0c6b4f5f4d.mp3" loop></audio>
+
+<script>
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+
+let animales = [
+  {nombre:"Perro", color:"brown"},
+  {nombre:"Gato", color:"orange"},
+  {nombre:"Conejo", color:"white"},
+  {nombre:"Zorro", color:"red"},
+  {nombre:"Lobo", color:"gray"}
+];
+
+let animalIndex = 0;
+let player, enemigos, objetos, jefe;
+let suelo = 330;
+let gravedad = 1;
+let distancia = 0;
+let nivel = 1;
+let bioma = "ciudad";
+let jugando = false;
+let record = localStorage.getItem("record") || 0;
+
+document.getElementById("record").innerText = record;
+
+function iniciarJuego() {
+  document.getElementById("menu").style.display = "none";
+  document.getElementById("music").play();
+  reset();
+  jugando = true;
+  loop();
+}
+
+function reset() {
+  player = {x:100,y:suelo,vy:0,size:30,shield:false};
+  enemigos = [];
+  objetos = [];
+  jefe = null;
+  distancia = 0;
+  nivel = 1;
+}
+
+function cambiarAnimal() {
+  animalIndex = (animalIndex+1)%animales.length;
+}
+
+document.addEventListener("keydown", e=>{
+  if(e.code==="Space" && player.y>=suelo){
+    player.vy=-15;
+    document.getElementById("jumpSound").play();
+  }
+});
+
+function generarBioma(){
+  if(nivel<4) bioma="ciudad";
+  else if(nivel<7) bioma="bosque";
+  else bioma="desierto";
+}
+
+function dibujarFondo(){
+  if(bioma==="ciudad"){
+    ctx.fillStyle="#555";
+    ctx.fillRect(0,0,900,400);
+  }
+  if(bioma==="bosque"){
+    ctx.fillStyle="#2a5";
+    ctx.fillRect(0,0,900,400);
+    for(let i=0;i<8;i++){
+      ctx.fillStyle="brown";
+      ctx.fillRect(i*120+50,200,20,150);
+      ctx.fillStyle="green";
+      ctx.beginPath();
+      ctx.arc(i*120+60,180,40,0,Math.PI*2);
+      ctx.fill();
+    }
+  }
+  if(bioma==="desierto"){
+    ctx.fillStyle="#dcb";
+    ctx.fillRect(0,0,900,400);
+    ctx.fillStyle="#c96";
+    for(let i=0;i<6;i++){
+      ctx.fillRect(i*150+50,260,30,70);
+    }
+  }
+}
+
+function dibujarJugador(){
+  let a = animales[animalIndex];
+  ctx.fillStyle = a.color;
+  ctx.beginPath();
+  ctx.arc(player.x,player.y,player.size,0,Math.PI*2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(player.x-10,player.y-25,8,0,Math.PI*2);
+  ctx.arc(player.x+10,player.y-25,8,0,Math.PI*2);
+  ctx.fill();
+  if(player.shield){
+    ctx.strokeStyle="cyan";
+    ctx.lineWidth=3;
+    ctx.beginPath();
+    ctx.arc(player.x,player.y,player.size+10,0,Math.PI*2);
+    ctx.stroke();
+  }
+}
+
+function loop(){
+  if(!jugando) return;
+  ctx.clearRect(0,0,900,400);
+  dibujarFondo();
+
+  player.vy+=gravedad;
+  player.y+=player.vy;
+  if(player.y>suelo) player.y=suelo;
+
+  dibujarJugador();
+
+  distancia++;
+  if(distancia%300===0){
+    nivel++;
+    generarBioma();
+    enemigos.push({x:900,y:suelo,size:25});
+    if(nivel%2===0) objetos.push({x:900,y:suelo-40});
+    if(nivel===9) jefe={x:900,y:suelo,vida:15};
+  }
+
+  enemigos.forEach(e=>{
+    e.x-=4;
+    ctx.fillStyle="red";
+    ctx.beginPath();
+    ctx.arc(e.x,e.y,e.size,0,Math.PI*2);
+    ctx.fill();
+    if(Math.hypot(player.x-e.x,player.y-e.y)<player.size+e.size){
+      document.getElementById("hitSound").play();
+      if(player.shield){player.shield=false;e.x=-100;}
+      else terminar();
+    }
+  });
+
+  objetos.forEach(o=>{
+    o.x-=4;
+    ctx.fillStyle="cyan";
+    ctx.fillRect(o.x-10,o.y-10,20,20);
+    if(Math.abs(player.x-o.x)<20){
+      player.shield=true;
+      o.x=-100;
+    }
+  });
+
+  if(jefe){
+    jefe.x-=2;
+    ctx.fillStyle="purple";
+    ctx.fillRect(jefe.x-40,jefe.y-40,80,40);
+    if(Math.abs(player.x-jefe.x)<60){
+      if(player.shield){
+        jefe.vida--;
+        player.shield=false;
+      } else terminar();
+    }
+    if(jefe.vida<=0){
+      alert("🎉 HAS GANADO");
+      terminar();
+    }
+  }
+
+  ctx.fillStyle="white";
+  ctx.fillText("Animal: "+animales[animalIndex].nombre,10,20);
+  ctx.fillText("Nivel: "+nivel+" | "+bioma,300,20);
+
+  requestAnimationFrame(loop);
+}
+
+function terminar(){
+  jugando=false;
+  document.getElementById("music").pause();
+  if(distancia>record){
+    record=distancia;
+    localStorage.setItem("record",record);
+  }
+  document.getElementById("menu").style.display="flex";
+  document.getElementById("record").innerText=record;
+}
+</script>
+</body>
+</html>
